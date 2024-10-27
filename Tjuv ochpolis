@@ -1,0 +1,237 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+
+class Program
+{
+    public const int Width = 100;
+    public const int Height = 25;
+
+    public static Random random = new Random();
+    static List<Person> people = new List<Person>();
+
+    static int robberies = 0;
+    static int arrests = 0;
+    static int antalRånadeMedborgare = 0;
+    static int antalGripnaTjuvar = 0;
+    static int totalStolenItems = 0;
+    static int totalConfiscatedItems = 0;
+
+    static void Main(string[] args)
+    {
+        CreateCity(17, 22, 30);
+
+        while (true)
+        {
+            MovePeople();
+            DetectCollisions();
+            DrawCity();
+            if (!people.OfType<Thief>().Any())
+            {
+                Console.WriteLine("Polisen räddar stan!");
+                Console.WriteLine($"Antal rånade medborgare: {antalRånadeMedborgare}");
+                Console.WriteLine($"Antal gripna tjuvar: {antalGripnaTjuvar}");
+                break;
+            }
+            else if (!people.OfType<Citizen>().Any())
+            {
+                Console.WriteLine("Staden hamnar under tjuvarnas händer!");
+                break;
+            }
+
+            Thread.Sleep(500);
+        }
+    }
+
+    static void CreateCity(int numPolice, int numThieves, int numCitizens)
+    {
+        for (int i = 0; i < numPolice; i++) people.Add(new Police());
+        for (int i = 0; i < numThieves; i++) people.Add(new Thief());
+        for (int i = 0; i < numCitizens; i++) people.Add(new Citizen());
+    }
+
+    static void MovePeople()
+    {
+        foreach (var person in people)
+        {
+            person.Move(Width, Height);
+        }
+    }
+
+    static void DetectCollisions()
+    {
+        for (int i = 0; i < people.Count; i++)
+        {
+            for (int j = i + 1; j < people.Count; j++)
+            {
+                if (people[i].X == people[j].X && people[i].Y == people[j].Y)
+                {
+                    HandleCollision(people[i], people[j]);
+                }
+            }
+        }
+    }
+
+    static void HandleCollision(Person p1, Person p2)
+    {
+        if (p1 is Thief thief && p2 is Citizen citizen)
+        {
+            thief.StealFrom(citizen);
+            robberies++;
+            antalRånadeMedborgare++;
+            Console.WriteLine("Tjuv rånar medborgare!");
+            totalStolenItems++;
+            Thread.Sleep(2000);
+
+            if (thief.Inventory.Count(item => item == "Klocka") >= 7)
+            {       
+                people.Add(new Police());
+                people.Add(new Police());
+                Console.WriteLine("Tjuvarna har stulit 7 klockor, två poliser har skickats in!");
+            }
+        }
+        else if (p1 is Police police && p2 is Thief thief2)
+        {
+            police.Arrest(thief2);
+            arrests++;
+            antalGripnaTjuvar++;
+            Console.WriteLine("Polis fångar tjuv!");
+            totalConfiscatedItems += thief2.Inventory.Count;
+            thief2.Inventory.Clear();
+            Thread.Sleep(2000);
+        }
+    }
+
+    static void DrawCity()
+    {
+        Console.Clear();
+        char[,] grid = new char[Width, Height];
+
+        foreach (var person in people)
+        {
+            char symbol = person is Police ? 'P' : person is Thief ? 'T' : 'M';
+            grid[person.X, person.Y] = symbol;
+        }
+
+        for (int y = 0; y < Height; y++)
+        {
+            for (int x = 0; x < Width; x++)
+            {
+                Console.Write(grid[x, y] == '\0' ? '.' : grid[x, y]);
+            }
+            Console.WriteLine();
+        }
+
+        Console.WriteLine($"Antal rånade medborgare: {antalRånadeMedborgare}");
+        Console.WriteLine($"Antal gripna tjuvar: {antalGripnaTjuvar}");
+        Console.WriteLine($"Totalt stulna föremål: {totalStolenItems}");
+        Console.WriteLine($"Totalt beslagtagna föremål: {totalConfiscatedItems}");
+        
+        
+        ShowTotalInventories();
+    }
+
+    static void ShowTotalInventories()
+    {
+        
+        var stolenItemCounts = new Dictionary<string, int>();
+
+        foreach (var thief in people.OfType<Thief>())
+        {
+            foreach (var item in thief.Inventory)
+            {
+                if (!stolenItemCounts.ContainsKey(item))
+                {
+                    stolenItemCounts[item] = 0;
+                }
+                stolenItemCounts[item]++;
+            }
+        }
+
+        Console.WriteLine("Totala stulna föremål:");
+        foreach (var item in stolenItemCounts)
+        {
+            Console.WriteLine($"{item.Key}: {item.Value}");
+        }
+
+    
+        var confiscatedItemCounts = new Dictionary<string, int>();
+
+        foreach (var police in people.OfType<Police>())
+        {
+            foreach (var item in police.ConfiscatedGoods)
+            {
+                if (!confiscatedItemCounts.ContainsKey(item))
+                {
+                    confiscatedItemCounts[item] = 0;
+                }
+                confiscatedItemCounts[item]++;
+            }
+        }
+
+        Console.WriteLine("Totala beslagtagna föremål:");
+        foreach (var item in confiscatedItemCounts)
+        {
+            Console.WriteLine($"{item.Key}: {item.Value}");
+        }
+    }
+}
+
+class Person
+{
+    public int X { get; set; }
+    public int Y { get; set; }
+    public int XDirection { get; set; }
+    public int YDirection { get; set; }
+    public List<string> Inventory { get; set; } = new List<string>();
+
+    public Person()
+    {
+        X = Program.random.Next(Program.Width);
+        Y = Program.random.Next(Program.Height);
+        XDirection = Program.random.Next(-1, 2);
+        YDirection = Program.random.Next(-1, 2);
+    }
+
+    public void Move(int width, int height)
+    {
+        X = (X + XDirection + width) % width;
+        Y = (Y + YDirection + height) % height;
+    }
+}
+
+class Citizen : Person
+{
+    public Citizen()
+    {
+        Inventory.AddRange(new[] { "Nycklar", "Mobiltelefon", "Pengar", "Klocka" });
+    }
+}
+
+class Thief : Person
+{
+    public string? LastStolenItem { get; set; }
+
+    public void StealFrom(Citizen citizen)
+    {
+        if (citizen.Inventory.Count > 0)
+        {
+            int itemIndex = Program.random.Next(citizen.Inventory.Count);
+            LastStolenItem = citizen.Inventory[itemIndex];
+            citizen.Inventory.RemoveAt(itemIndex);
+            Inventory.Add(LastStolenItem);
+        }
+    }
+}
+
+class Police : Person
+{
+    public List<string> ConfiscatedGoods { get; set; } = new List<string>();
+
+    public void Arrest(Thief thief)
+    {
+        ConfiscatedGoods.AddRange(thief.Inventory);
+        thief.Inventory.Clear();
+    }
+}
